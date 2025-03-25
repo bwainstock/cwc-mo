@@ -389,8 +389,14 @@ def _(cda, crr, fit_file, kg, mo, rho, weight):
 
 
 @app.cell
-def _(accel_calc, calculate_distance, fit_to_dataframe, resample_data):
-    raw_df = fit_to_dataframe("/Users/bwainsto/Downloads/good.fit")
+def _(
+    accel_calc,
+    calculate_distance,
+    fit_file,
+    fit_to_dataframe,
+    resample_data,
+):
+    raw_df = fit_to_dataframe(fit_file.contents())
     raw_df = raw_df.with_columns(a=accel_calc(raw_df["v"], 1))
     df = resample_data(raw_df)
     distance = calculate_distance(df)
