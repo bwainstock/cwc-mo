@@ -30,6 +30,7 @@ def _():
     import pandas as pd
     import numpy as np
     import fitdecode
+
     return Any, BytesIO, PurePath, fitdecode, mo, np, pd, pl
 
 
@@ -75,7 +76,6 @@ def _(fitdecode, np, pl):
             df.select("v", "watts", "elevation", "a", "timestamp", "latitude", "longitude"),
         )
 
-
     def _validate_required_columns(df: pl.DataFrame) -> bool:
         """Validate that all required columns are present in the dataframe."""
         required_columns = {"timestamp", "v", "watts", "elevation"}
@@ -85,7 +85,6 @@ def _(fitdecode, np, pl):
             return False
 
         return True
-
 
     def virtual_slope(
         cda: float,
@@ -131,15 +130,12 @@ def _(fitdecode, np, pl):
             valid_va = valid_vg + vw
 
             # Calculate slope for valid entries (no division by zero possible)
-            valid_slopes = (
-                (valid_w / (valid_vg * kg * 9.807)) - (cda * rho * valid_va**2 / (2 * kg * 9.807)) - crr - valid_acc / 9.807
-            )
+            valid_slopes = (valid_w / (valid_vg * kg * 9.807)) - (cda * rho * valid_va**2 / (2 * kg * 9.807)) - crr - valid_acc / 9.807
 
             # Assign results back to full array
             slope[valid_idx] = valid_slopes
 
         return slope
-
 
     def delta_ve(
         cda: float,
@@ -174,7 +170,6 @@ def _(fitdecode, np, pl):
         # Calculate virtual elevation change
         return df["v"].to_numpy() * dt * np.sin(np.arctan(slope))
 
-
     def accel_calc(v, dt):
         """
         Calculate acceleration from velocity data.
@@ -205,7 +200,6 @@ def _(fitdecode, np, pl):
 
         return a
 
-
     def calculate_virtual_profile(ve_changes: np.ndarray, actual_elevation: np.ndarray) -> np.ndarray:
         """
         Helper function to build the virtual elevation profile from elevation changes.
@@ -227,7 +221,6 @@ def _(fitdecode, np, pl):
 
         return virtual_profile
 
-
     def resample_data(df: pl.DataFrame, time_column: str = "timestamp", resample_freq: str = "1s"):
         """
         Resample data to a constant time interval.
@@ -248,7 +241,6 @@ def _(fitdecode, np, pl):
 
         return resampled_df
 
-
     def calculate_distance(df: pl.DataFrame, dt: float = 1) -> np.ndarray:
         """
         Calculate distance from velocity data.
@@ -264,7 +256,6 @@ def _(fitdecode, np, pl):
         segment_distances = df["v"].to_numpy() * dt
 
         return np.cumsum(segment_distances)
-
 
     def fit_to_dataframe(fit_file_path):
         """
@@ -300,6 +291,7 @@ def _(fitdecode, np, pl):
         df = _process_dataframe(df)
 
         return df
+
     return (
         accel_calc,
         calculate_distance,
@@ -332,7 +324,7 @@ def _(mo):
 @app.cell
 def _(mo):
     cda_min, cda_max = 0.1, 0.5
-    get_cda, set_cda = mo.state(cda_min)
+    get_cda, set_cda = mo.state((cda_max - cda_min) / 2)
     return cda_max, cda_min, get_cda, set_cda
 
 
@@ -351,7 +343,7 @@ def _(cda_max, cda_min, get_cda, mo, set_cda):
 @app.cell
 def _(mo):
     crr_min, crr_max = 0.001, 0.01
-    get_crr, set_crr = mo.state(crr_min)
+    get_crr, set_crr = mo.state((crr_max - crr_min) / 2)
     return crr_max, crr_min, get_crr, set_crr
 
 
@@ -418,9 +410,7 @@ def _(calculate_virtual_profile, df, distance, ve_changes):
 
 @app.cell
 def _(vdf):
-    elevation_df = vdf.unpivot(
-        index="distance", on=["elevation", "virtual_elevation"], variable_name="Type", value_name="Value"
-    )
+    elevation_df = vdf.unpivot(index="distance", on=["elevation", "virtual_elevation"], variable_name="Type", value_name="Value")
     return (elevation_df,)
 
 
