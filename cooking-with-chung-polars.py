@@ -472,12 +472,6 @@ def _():
 
 @app.cell
 def _():
-    0
-    return
-
-
-@app.cell
-def _():
     return
 
 
