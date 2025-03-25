@@ -1,5 +1,7 @@
 name: GitHub Pages
 
+on: push
+
 env:
   UV_SYSTEM_PYTHON: 1
 
