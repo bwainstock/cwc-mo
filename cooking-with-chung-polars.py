@@ -47,14 +47,16 @@ def _():
 
 
 @app.cell
-def _():
-    import polars as pl
+def _(mo):
+    with mo.status.spinner(title="Chopping..."):
+        import polars as pl
     return (pl,)
 
 
 @app.cell
-def _():
-    import numpy as np
+def _(mo):
+    with mo.status.spinner(title="Dicing..."):
+        import numpy as np
     return (np,)
 
 
@@ -65,20 +67,23 @@ def _():
 
 
 @app.cell
-def _():
-    from scipy.optimize import basinhopping, differential_evolution, minimize_scalar
+def _(mo):
+    with mo.status.spinner(title="Frying..."):
+        from scipy.optimize import basinhopping, differential_evolution, minimize_scalar
     return basinhopping, differential_evolution, minimize_scalar
 
 
 @app.cell
-def _():
-    from scipy.stats import pearsonr
+def _(mo):
+    with mo.status.spinner(title="Boiling..."):
+        from scipy.stats import pearsonr
     return (pearsonr,)
 
 
 @app.cell
-def _():
-    import plotly.express as px
+def _(mo):
+    with mo.status.spinner(title="Stirring..."):
+        import plotly.express as px
     return (px,)
 
 
