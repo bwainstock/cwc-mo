@@ -1112,8 +1112,21 @@ def _(mo, px, vdf):
     _plot = px.line(vdf, x="distance", y=["elevation", "virtual_elevation"], title="Virtual Elevation vs Elevation", labels={"value": "Elevation", "variable": "Type"})
     _plot.update_layout(selectdirection="h")
     plot = mo.ui.plotly(_plot)
-    plot
+
     return (plot,)
+
+
+@app.cell
+def _(plot):
+    plot
+    return
+
+
+@app.cell
+def _(plot, vdf):
+    start, end = plot.ranges.get("x", (vdf["distance"].min(), vdf["distance"].max()))
+    selected_df = vdf.filter((vdf["distance"] >= start) & (vdf["distance"] <= end))
+    return end, selected_df, start
 
 
 @app.cell
@@ -1123,22 +1136,49 @@ def _(get_cda, get_crr, mo):
 
 
 @app.cell
-def _():
-    # import geopandas as gpd
-    # import altair_tiles as til
-    # from shapely import Point, LineString
+def _(df, mo, pl, px, selected_df):
+    import plotly.graph_objects as go
 
-    # line = LineString([Point(lon, lat) for lon, lat in zip(selected_df["longitude"], selected_df["latitude"])])
-    # line_geo = gpd.GeoDataFrame(geometry=[line], crs="EPSG:4326")
-    # line_chart = alt.Chart(line_geo).mark_geoshape(filled=False, stroke="green", strokeWidth=1).project( type="mercator")
-    # geo_chart_with_tiles = til.add_tiles(line_chart).properties(width=500, height=400)
+    # Compute bounding box
+    min_lat, max_lat = df["latitude"].min(), df["latitude"].max()
+    min_lon, max_lon = df["longitude"].min(), df["longitude"].max()
 
-    # start_point = Point(selected_df.select(["longitude", "latitude"]).row(0))
-    # point_geo = gpd.GeoDataFrame(geometry=[start_point], crs="EPSG:4326")
-    # point_chart = alt.Chart(point_geo).mark_geoshape(filled=False, stroke="blue").project( type="mercator")
-    # point_chart_with_tiles = til.add_tiles(line_chart).properties(width=500, height=400)
-    # mo.hstack([chart,point_chart], widths=[4,1])
-    return
+    # Compute center
+    center_lat = (min_lat + max_lat) / 2
+    center_lon = (min_lon + max_lon) / 2
+
+    # Estimate zoom level (adjust the divisor for finer control)
+    zoom_level = 17  # Default zoom
+    lat_range = max_lat - min_lat
+    lon_range = max_lon - min_lon
+    if lat_range > 0 or lon_range > 0:
+        zoom_level = max(17 - (lat_range + lon_range) * 100, 5)  # Adjust scale dynamically
+
+
+    _map_plot = px.line_map(data_frame=selected_df, lat="latitude", lon="longitude", map_style="open-street-map", zoom=zoom_level, center={"lat": center_lat, "lon": center_lon})
+
+    start_end_df = pl.concat([selected_df.head(1), selected_df.tail(1)])
+    start_end_plot = px.scatter_map(start_end_df, lat="latitude", lon="longitude", color=["start", "end"], color_discrete_sequence=["green", "red"], size=[2, 2], size_max=10)
+
+    _map_plot.add_traces(start_end_plot.data)
+
+    map_plot = mo.ui.plotly(_map_plot)
+    map_plot
+    return (
+        center_lat,
+        center_lon,
+        go,
+        lat_range,
+        lon_range,
+        map_plot,
+        max_lat,
+        max_lon,
+        min_lat,
+        min_lon,
+        start_end_df,
+        start_end_plot,
+        zoom_level,
+    )
 
 
 @app.cell
