@@ -29,6 +29,12 @@ def _():
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""# Cooking With Chung 👨🏽‍🍳""").center()
+    return
+
+
+@app.cell
 def _():
     from io import BytesIO
     return (BytesIO,)
@@ -1027,11 +1033,12 @@ def _(mo):
 def _(cda, crr, fit_file, kg, mo, rho, weight):
     unit_picker = mo.hstack([mo.md("lbs"), kg])
     mass_ui = mo.hstack([unit_picker, weight], justify="center")
-    ai_button = mo.ui.run_button(label="AI ME")
-    crr_button = mo.ui.run_button(label="CRR ME")
-    buttons = mo.hstack([ai_button, crr_button])
+    ai_button = mo.ui.run_button(label="Optimize Crr/CdA", tooltip="Optimize both CdA and Crr")
+    crr_button = mo.ui.run_button(label="Optimize Crr", tooltip="Optimize Crr using the given CdA")
+    cda_button = mo.ui.run_button(label="Optimize CdA", tooltip="Optimize CdA using the given Crr")
+    buttons = mo.hstack([ai_button, crr_button, cda_button])
     mo.vstack([mass_ui, rho, fit_file, cda, crr, buttons], align="center").callout("info")
-    return ai_button, buttons, crr_button, mass_ui, unit_picker
+    return ai_button, buttons, cda_button, crr_button, mass_ui, unit_picker
 
 
 @app.cell
@@ -1074,24 +1081,36 @@ def _(
     df,
     get_cda,
     mo,
-    optimize_both_params_balanced,
+    optimize_crr_only_balanced,
     rho,
     set_crr,
     weight,
 ):
     mo.stop(not crr_button.value)
-    with mo.status.spinner(subtitle=f"Cooking Crr using {get_cda()}") as _spinner:
-        _, optimized_crr, _, _, _ = optimize_both_params_balanced(df, weight.value, rho.value)
+    test_cda = get_cda()
+    with mo.status.spinner(subtitle=f"Cooking Crr using {test_cda} as CdA") as _spinner:
+        _, optimized_crr, _, _, _ = optimize_crr_only_balanced(df, test_cda, weight.value, rho.value)
         set_crr(optimized_crr)
-    return (optimized_crr,)
+    return optimized_crr, test_cda
 
 
 @app.cell
-def _(get_cda, get_crr, weight):
-    print(weight.value)
-    print(get_cda())
-    print(get_crr())
-    return
+def _(
+    cda_button,
+    df,
+    get_crr,
+    mo,
+    optimize_cda_only_balanced,
+    rho,
+    set_cda,
+    weight,
+):
+    mo.stop(not cda_button.value)
+    test_crr = get_crr()
+    with mo.status.spinner(subtitle=f"Cooking CdA using {test_crr} as Crr") as _spinner:
+        optimized_cda, _, _, _, _ = optimize_cda_only_balanced(df, test_crr, weight.value, rho.value)
+        set_cda(optimized_cda)
+    return optimized_cda, test_crr
 
 
 @app.cell
@@ -1108,25 +1127,20 @@ def _(calculate_virtual_profile, df, distance, ve_changes):
 
 
 @app.cell
-def _(mo, px, vdf):
-    _plot = px.line(vdf, x="distance", y=["elevation", "virtual_elevation"], title="Virtual Elevation vs Elevation", labels={"value": "Elevation", "variable": "Type"})
-    _plot.update_layout(selectdirection="h")
-    plot = mo.ui.plotly(_plot)
-
-    return (plot,)
-
-
-@app.cell
-def _(plot):
-    plot
+def _(mo):
+    mo.md(r"""## Overall""").center()
     return
 
 
 @app.cell
-def _(plot, vdf):
-    start, end = plot.ranges.get("x", (vdf["distance"].min(), vdf["distance"].max()))
-    selected_df = vdf.filter((vdf["distance"] >= start) & (vdf["distance"] <= end))
-    return end, selected_df, start
+def _(px):
+    def create_elevation_plot(df):
+        plot = px.line(
+            df, x="distance", y=["elevation", "virtual_elevation"], labels={"value": "Elevation", "variable": ""}
+        )
+        plot.update_layout(selectdirection="h")
+        return plot
+    return (create_elevation_plot,)
 
 
 @app.cell
@@ -1136,54 +1150,71 @@ def _(get_cda, get_crr, mo):
 
 
 @app.cell
-def _(df, mo, pl, px, selected_df):
-    import plotly.graph_objects as go
+def _(create_elevation_plot, mo, pl, px, vdf):
+    def create_map(df: pl.DataFrame):
+        # Compute bounding box
+        min_lat, max_lat = df["latitude"].min(), df["latitude"].max()
+        min_lon, max_lon = df["longitude"].min(), df["longitude"].max()
 
-    # Compute bounding box
-    min_lat, max_lat = df["latitude"].min(), df["latitude"].max()
-    min_lon, max_lon = df["longitude"].min(), df["longitude"].max()
+        # Compute center
+        center_lat = (min_lat + max_lat) / 2
+        center_lon = (min_lon + max_lon) / 2
 
-    # Compute center
-    center_lat = (min_lat + max_lat) / 2
-    center_lon = (min_lon + max_lon) / 2
+        # Estimate zoom level (adjust the divisor for finer control)
+        zoom_level = 17  # Default zoom
+        lat_range = max_lat - min_lat
+        lon_range = max_lon - min_lon
+        if lat_range > 0 or lon_range > 0:
+            zoom_level = max(17 - (lat_range + lon_range) * 100, 5)  # Adjust scale dynamically
 
-    # Estimate zoom level (adjust the divisor for finer control)
-    zoom_level = 17  # Default zoom
-    lat_range = max_lat - min_lat
-    lon_range = max_lon - min_lon
-    if lat_range > 0 or lon_range > 0:
-        zoom_level = max(17 - (lat_range + lon_range) * 100, 5)  # Adjust scale dynamically
+        _map_plot = px.line_map(
+            data_frame=df,
+            lat="latitude",
+            lon="longitude",
+            map_style="open-street-map",
+            zoom=zoom_level,
+            center={"lat": center_lat, "lon": center_lon},
+        )
+        _map_plot.update_layout(dragmode="pan")
+
+        start_end_df = pl.concat([df.head(1), df.tail(1)])
+        start_end_plot = px.scatter_map(
+            start_end_df,
+            lat="latitude",
+            lon="longitude",
+            color=["start", "end"],
+            color_discrete_sequence=["green", "red"],
+            size=[2, 2],
+            size_max=10,
+        )
+
+        _map_plot.add_traces(start_end_plot.data).update_layout(showlegend=False, hovermode=False)
+
+        return _map_plot
 
 
-    _map_plot = px.line_map(data_frame=selected_df, lat="latitude", lon="longitude", map_style="open-street-map", zoom=zoom_level, center={"lat": center_lat, "lon": center_lon})
-
-    start_end_df = pl.concat([selected_df.head(1), selected_df.tail(1)])
-    start_end_plot = px.scatter_map(start_end_df, lat="latitude", lon="longitude", color=["start", "end"], color_discrete_sequence=["green", "red"], size=[2, 2], size_max=10)
-
-    _map_plot.add_traces(start_end_plot.data)
-
-    map_plot = mo.ui.plotly(_map_plot)
-    map_plot
-    return (
-        center_lat,
-        center_lon,
-        go,
-        lat_range,
-        lon_range,
-        map_plot,
-        max_lat,
-        max_lon,
-        min_lat,
-        min_lon,
-        start_end_df,
-        start_end_plot,
-        zoom_level,
-    )
+    plot = mo.ui.plotly(create_elevation_plot(vdf).update_layout(height=300))
+    mo.hstack([plot], justify="space-around", widths=[3, 1])
+    return create_map, plot
 
 
 @app.cell
-def _():
-    return
+def _(plot, vdf):
+    def filter_df_by_plot_selection():
+        start, end = plot.ranges.get("x", (vdf["distance"].min(), vdf["distance"].max()))
+        return vdf.filter((vdf["distance"] >= start) & (vdf["distance"] <= end))
+
+
+    selected_df = filter_df_by_plot_selection()
+    return filter_df_by_plot_selection, selected_df
+
+
+@app.cell
+def _(create_elevation_plot, create_map, mo, selected_df):
+    sel_plot = create_elevation_plot(selected_df)
+    sel_map_plot = mo.ui.plotly(create_map(selected_df))
+    mo.hstack([sel_plot, sel_map_plot], justify="space-around", widths=[3, 1])
+    return sel_map_plot, sel_plot
 
 
 if __name__ == "__main__":
